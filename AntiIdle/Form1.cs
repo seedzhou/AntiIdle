@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Threading;
 
 namespace AntiIdle
 {
@@ -19,7 +20,7 @@ namespace AntiIdle
         {
             InitializeComponent();
             AntiIdleIcon.ContextMenuStrip = contextMenuStrip;
-            timer.Interval = 299000;
+            timer.Interval = 1000;
             timer.Enabled = true;
             timer1.Enabled = false;
             toolStripMenuItem_Click(fourHoursToolStripMenuItem, null);
@@ -27,7 +28,23 @@ namespace AntiIdle
 
         private void TimerOnTick(object sender, EventArgs eventArgs)
         {
-            SendInputClass.MoveMouse();
+            var title = SendInputClass.GetActiveWindowTitle();
+
+            if (title != null && title.Contains("diep.io"))
+            {
+                int minute = DateTime.Now.Minute;
+                if (minute % 2 == 0)
+                {
+                    SendInputClass.SendKeyboardInput(38); // up
+                }
+                else {
+                    SendInputClass.SendKeyboardInput(38); // up
+                    //SendInputClass.SendKeyboardInput(40); // down
+                }
+
+                // SendInputClass.HoldKeyboardInput(37); // left
+                SendInputClass.HoldKeyboardInput(39); // right
+            }
         }
 
         private bool allowVisible;     // ContextMenu's Show command used
@@ -188,7 +205,11 @@ namespace AntiIdle
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool GetCursorPos(out Point lpPoint);
 
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
 
+        [DllImport("user32.dll")]
+        static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
 
         [StructLayout(LayoutKind.Sequential)]
         struct INPUT
@@ -303,6 +324,65 @@ namespace AntiIdle
 
             //returning cursor to previous position
             SetCursorPos(p.X, p.Y);
+        }
+
+        public static void SendKeyboardInput(ushort keycode)
+        {
+            KEYBDINPUT ki = new KEYBDINPUT()
+            {
+                time = 0,
+                wScan = 0,
+                dwExtraInfo = (IntPtr)0,
+                wVk = keycode,
+                dwFlags = 0
+            };
+
+            INPUT keyDown = new INPUT();
+            keyDown.type = SendInputEventType.InputKeyboard;
+            keyDown.mkhi.ki = ki;
+
+            INPUT keyUp = keyDown;
+            keyUp.mkhi.ki.dwFlags = 2;
+
+            // Attempt to disable capslock, tough if this fails.
+            SendInput(1, ref keyDown, Marshal.SizeOf(keyDown));
+
+            Thread.Sleep(2000);
+
+            // Do not send the keyUp as part of the above array, it is ignored.
+            SendInput(1, ref keyUp, Marshal.SizeOf(keyDown));
+        }
+
+        public static void HoldKeyboardInput(ushort keycode)
+        {
+            KEYBDINPUT ki = new KEYBDINPUT()
+            {
+                time = 0,
+                wScan = 0,
+                dwExtraInfo = (IntPtr)0,
+                wVk = keycode,
+                dwFlags = 0
+            };
+
+            INPUT keyDown = new INPUT();
+            keyDown.type = SendInputEventType.InputKeyboard;
+            keyDown.mkhi.ki = ki;
+
+            // Attempt to disable capslock, tough if this fails.
+            SendInput(1, ref keyDown, Marshal.SizeOf(keyDown));
+        }
+
+        public static string GetActiveWindowTitle()
+        {
+            const int nChars = 256;
+            StringBuilder Buff = new StringBuilder(nChars);
+            IntPtr handle = GetForegroundWindow();
+
+            if (GetWindowText(handle, Buff, nChars) > 0)
+            {
+                return Buff.ToString();
+            }
+            return null;
         }
     }
 }
